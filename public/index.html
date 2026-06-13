@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TextBatch Pro - 智能文本批量处理工具</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); min-height: 100vh; padding: 20px; }
+.container { max-width: 800px; margin: 0 auto; background: #fff; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+header { text-align: center; margin-bottom: 30px; }
+header h1 { font-size: 28px; color: #333; }
+.subtitle { color: #888; font-size: 14px; margin-top: 8px; }
+
+.upload-zone { border: 3px dashed #ddd; border-radius: 16px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.3s; background: #fafafa; }
+.upload-zone:hover, .upload-zone.dragover { border-color: #43e97b; background: #f0fff4; }
+.upload-icon { font-size: 48px; margin-bottom: 16px; }
+.upload-zone p { font-size: 16px; color: #555; }
+.upload-hint { font-size: 13px; color: #aaa; margin-top: 8px; }
+.file-count { margin-top: 12px; font-size: 14px; color: #43e97b; font-weight: 600; }
+
+.controls { margin-top: 20px; padding: 20px; background: #f0fff4; border-radius: 12px; }
+.control-group { margin-bottom: 16px; }
+.control-group label { display: block; font-size: 14px; font-weight: 600; color: #555; margin-bottom: 6px; }
+select, input[type="text"], input[type="file"] { width: 100%; padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; transition: border-color 0.3s; outline: none; }
+select:focus, input[type="text"]:focus { border-color: #43e97b; }
+.input-row { display: flex; gap: 12px; }
+.input-row input { flex: 1; }
+.btn-primary { display: block; width: 100%; padding: 14px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(67, 233, 123, 0.4); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.progress { margin-top: 16px; text-align: center; padding: 20px; background: #f0fff4; border-radius: 10px; display: none; }
+.progress-text { font-size: 16px; color: #43e97b; }
+
+.results { margin-top: 20px; }
+.result-item { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; }
+.result-item .info { flex: 1; }
+.result-item .name { font-size: 14px; color: #333; word-break: break-all; }
+.result-item .detail { font-size: 12px; color: #888; }
+.result-item .dl-btn { padding: 6px 16px; background: #43e97b; color: #fff; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.result-item .dl-btn:hover { background: #3ad86e; }
+
+.toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 8px; color: #fff; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000; background: #333; }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>📝 TextBatch Pro</h1>
+    <p class="subtitle">智能文本批量处理 — 查找替换、去重、统计、一键搞定</p>
+  </header>
+
+  <div class="upload-zone" id="uploadZone">
+    <div class="upload-icon">📂</div>
+    <p>拖拽文件到此处，或点击选择</p>
+    <p class="upload-hint">支持 .txt .csv .json .md .html .js .py 等文本文件</p>
+    <input type="file" id="fileInput" multiple hidden>
+  </div>
+
+  <div class="controls" id="controls" style="display:none">
+    <div class="control-group">
+      <label>处理类型</label>
+      <select id="actionSelect">
+        <option value="find_replace">查找替换</option>
+        <option value="trim_lines">清理空行和首尾空格</option>
+        <option value="dedup_lines">去重行</option>
+        <option value="stats">文本统计</option>
+        <option value="extract_links">提取链接和邮箱</option>
+      </select>
+    </div>
+
+    <div class="control-group" id="findReplaceGroup">
+      <label>查找内容</label>
+      <input type="text" id="findText" placeholder="输入要查找的文字...">
+      <label style="margin-top:8px">替换为（留空则删除）</label>
+      <input type="text" id="replaceText" placeholder="可选，输入替换文字...">
+    </div>
+
+    <button id="processBtn" class="btn-primary">🚀 开始处理</button>
+  </div>
+
+  <div class="progress" id="progress">
+    <div class="progress-text">⏳ 处理中，请稍候...</div>
+  </div>
+
+  <div class="results" id="results"></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const uploadZone = document.getElementById('uploadZone');
+  const fileInput = document.getElementById('fileInput');
+  const controls = document.getElementById('controls');
+  const actionSelect = document.getElementById('actionSelect');
+  const findReplaceGroup = document.getElementById('findReplaceGroup');
+  const findText = document.getElementById('findText');
+  const replaceText = document.getElementById('replaceText');
+  const processBtn = document.getElementById('processBtn');
+  const progress = document.getElementById('progress');
+  const results = document.getElementById('results');
+  const toast = document.getElementById('toast');
+
+  let selectedFiles = [];
+
+  function showToast(msg, isError) {
+    toast.textContent = msg;
+    toast.style.background = isError ? '#e74c3c' : '#333';
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + 'KB';
+    return (bytes / 1048576).toFixed(1) + 'MB';
+  }
+
+  function updateUI() {
+    if (selectedFiles.length === 0) { controls.style.display = 'none'; return; }
+    controls.style.display = 'block';
+    uploadZone.querySelector('.file-count')?.remove();
+    const div = document.createElement('div');
+    div.className = 'file-count';
+    div.textContent = `✅ 已选择 ${selectedFiles.length} 个文件`;
+    uploadZone.appendChild(div);
+  }
+
+  uploadZone.addEventListener('click', () => fileInput.click());
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    const files = Array.from(e.dataTransfer.files);
+    selectedFiles = [...selectedFiles, ...files].slice(0, 50);
+    updateUI();
+    showToast(`已添加 ${files.length} 个文件`);
+  });
+  fileInput.addEventListener('change', () => {
+    selectedFiles = [...selectedFiles, ...Array.from(fileInput.files)].slice(0, 50);
+    updateUI();
+    showToast(`已添加 ${fileInput.files.length} 个文件`);
+    fileInput.value = '';
+  });
+
+  actionSelect.addEventListener('change', () => {
+    findReplaceGroup.style.display = actionSelect.value === 'find_replace' ? 'block' : 'none';
+  });
+
+  processBtn.addEventListener('click', async () => {
+    if (selectedFiles.length === 0) return showToast('请先选择文件', true);
+    if (actionSelect.value === 'find_replace' && !findText.value.trim()) {
+      return showToast('请输入要查找的内容', true);
+    }
+
+    processBtn.disabled = true;
+    processBtn.textContent = '⏳ 处理中...';
+    progress.style.display = 'block';
+    results.innerHTML = '';
+
+    const formData = new FormData();
+    selectedFiles.forEach(f => formData.append('files', f));
+    formData.append('action', actionSelect.value);
+    formData.append('findText', findText.value);
+    formData.append('replaceText', replaceText.value);
+
+    try {
+      const resp = await fetch('/api/process', { method: 'POST', body: formData });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error);
+
+      results.innerHTML = '<h3 style="margin-bottom:12px;color:#333;">✅ 处理完成</h3>' +
+        data.files.map(f => {
+          let detail = `${formatSize(f.size)}`;
+          if (f.matches !== undefined) detail += ` | 匹配 ${f.matches} 处`;
+          if (f.lines !== undefined) detail += ` | ${f.lines} 行 ${f.characters} 字符`;
+          if (f.urls !== undefined) detail += ` | ${f.urls} 链接 ${f.emails} 邮箱`;
+          if (f.chineseCharacters !== undefined) detail += ` | 中文字 ${f.chineseCharacters}`;
+          return `<div class="result-item">
+            <div class="info">
+              <div class="name">${f.originalName} → ${f.name}</div>
+              <div class="detail">${detail}</div>
+            </div>
+            <a href="${f.url}" class="dl-btn" download>下载</a>
+          </div>`;
+        }).join('');
+      showToast(`成功处理 ${data.files.length} 个文件`);
+      selectedFiles = [];
+      updateUI();
+    } catch (err) {
+      showToast('处理失败: ' + err.message, true);
+    } finally {
+      processBtn.disabled = false;
+      processBtn.textContent = '🚀 开始处理';
+      progress.style.display = 'none';
+    }
+  });
+});
+</script>
+</body>
+</html>

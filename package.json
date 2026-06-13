@@ -1,0 +1,13 @@
+{
+  "name": "textbatch-pro",
+  "version": "1.0.0",
+  "description": "智能文本批量处理工具 - 查找替换/去重/统计/提取",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "keywords": ["text", "batch", "processing"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.2.1",
+    "multer": "^2.1.1"
+  }
+}
